@@ -17,6 +17,7 @@ eksctl create nodegroup --cluster=eksdemo1 --region=us-east-1 --name=eksdemo1-ng
 
 ```
 For both Public Subnets, add the tag as `kubernetes.io/cluster/eksdemo1 =  shared` 
+
 Add all traffic to worker nodes 
 
 ## Step-02: Pre-requisite check
