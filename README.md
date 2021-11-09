@@ -3,64 +3,48 @@
 # DevOps with AWS Developer Tools on AWS EKS
 
 ## Step-01: DevOps
--  EKS cluster
+-  Spin up EKS cluster using eksctl cli
 -  AWS Tools that help us to implement DevOps.
   - AWS CodeCommit
   - AWS CodeBuild
   - AWS CodePipeline
 
-## Step-02: 
-- We are going to create a ECR Repository for our Docker Images
-- We are going to create Code Commit Git Repository and check-in our Docker and Kubernetes Manifests
-- We will write a `buildspec.yml` which will eventually build a docker image, push the same to ECR Repository and Deploy the updated k8s Deployment manifest to EKS Cluster.
-- To achive all this we need also create or update few roles
-  - **STS Assume Role:** EksCodeBuildKubectlRole
-    - **Inline Policy:** eksdescribe
-  - **CodeBuild Role:** codebuild-eks-devops-cb-for-pipe-service-role    
-    - **ECR Full Access Policy:** AmazonEC2ContainerRegistryFullAccess
-    - **STS Assume Policy:** eks-codebuild-sts-assume-role
-        - **STS Assume Role:** EksCodeBuildKubectlRole
+eksctl create cluster --name=eksdemo1 --region=us-east-1 --zones=us-east-1a,us-east-1b   --without-nodegroup
+eksctl utils associate-iam-oidc-provider --region us-east-1 --cluster eksdemo1 --approve
+eksctl create nodegroup --cluster=eksdemo1 --region=us-east-1 --name=eksdemo1-ng-private1 --node-type=t3.medium --nodes-min=2 --nodes-max=4 --node-volume-size=20 --ssh-access --ssh-public-key=kube-demo --managed --asg-access --external-dns-access --full-ecr-access --appmesh-access --alb-ingress-access --node-private-networking  
+kube-demo keypair
+For both Public Subnets, add the tag as `kubernetes.io/cluster/eksdemo1 =  shared` 
+Add all traffic to worker nodes 
 
-## Step-03: Pre-requisite check
-- We are going to deploy a application which will also have a `ALB Ingress Service` and also will register its DNS name in Route53 using `External DNS`
+## Step-02: Pre-requisite check
+- We are going to deploy a application which will also have a `ALB Ingress Service` 
 - Which means we should have both related pods running in our cluster. 
 ```
-# Verify alb-ingress-controller pod running in namespace kube-system
+Ingress:
+
+kubectl apply -f https://raw.githubusercontent.com/kubernetes-sigs/aws-alb-ingress-controller/master/docs/examples/rbac-role.yaml
+kubectl get sa -n kube-system
+aws iam create-policy --policy-name ALBIngressControllerIAMPolicy --policy-document https://raw.githubusercontent.com/kubernetes-sigs/aws-alb-ingress-controller/master/docs/examples/iam-policy.json
+
+# Replaced region, name, cluster and policy arn (Policy arn we took note in step-03)
+eksctl create iamserviceaccount --region us-east-1 --name alb-ingress-controller --namespace kube-system --cluster eksdemo1 --attach-policy-arn arn:aws:iam::080400906742:policy/ALBIngressControllerIAMPolicy --override-existing-serviceaccounts --approve
+
+kubectl apply -f https://raw.githubusercontent.com/kubernetes-sigs/aws-alb-ingress-controller/master/docs/examples/alb-ingress-controller.yaml
+
+kubectl get deploy -n kube-system
+
+kubectl edit deployment.apps/alb-ingress-controller -n kube-system
+- --ingress-class=alb
+- --cluster-name=eksdemo1
+
 kubectl get pods -n kube-system
 
 ```
 
-## Step-04: Create ECR Repository for our Application Docker Images
-- Go to Services -> Elastic Container Registry -> Create Repository
-- Name: eks-devops-nginx
-- Tag Immutability: Enable
-- Scan On Push: Enable
-- Click on **Create Repository**
-- Make a note of Repository name
-```
-# Sample ECR Repository URI
-180789647333.dkr.ecr.us-east-1.amazonaws.com/eks-devops-nginx
-```
+## Step-03: Create ECR Repository for our Application Docker Images
 
-## Step-05: Create CodeCommit Repository
-- Code Commit Introduction
-- Create Code Commit Repository with name as **eks-devops-nginx**
-- Create git credentials from IAM Service and make a note of those credentials.
-- Clone the git repository from Code Commit to local repository, during the process provide your git credentials generated to login to git repo
-```
-git clone https://git-codecommit.us-east-1.amazonaws.com/v1/repos/eks-devops-nginx
-```
-- Copy all files from course section **11-DevOps-with-AWS-Developer-Tools/Application-Manifests** to local repository
-  - buildspec.yml
-  - Dockerfile
-  - app1
-    - index.html 
-  - kube-manifests
-    - 01-DEVOPS-Nginx-Deployment.yml
-    - 02-DEVOPS-Nginx-NodePortService.yml
-    - 03-DEVOPS-Nginx-ALB-IngressService.yml
-- Commit code and Push to CodeCommit Repo
-```
+## Step-04: Create CodeCommit Repository
+
 git status
 git add .
 git commit -am "1 Added all files"
@@ -69,19 +53,7 @@ git status
 ```
 - Verify the same on CodeCommit Repository in AWS Management console.
 
-### Application Manifests Overview
-- Application-Manifests
-  - buildspec.yml
-  - Dockerfile
-  - app1
-    - index.html 
-  - kube-manifests
-    - 01-DEVOPS-Nginx-Deployment.yml
-    - 02-DEVOPS-Nginx-NodePortService.yml
-    - 03-DEVOPS-Nginx-ALB-IngressService.yml
-
-
-## Step-06: Create STS Assume IAM Role for CodeBuild to interact with AWS EKS
+## Step-05: Create STS Assume IAM Role for CodeBuild to interact with AWS EKS
 - In an AWS CodePipeline, we are going to use AWS CodeBuild to deploy changes to our Kubernetes manifests. 
 - This requires an AWS IAM role capable of interacting with the EKS cluster.
 - In this step, we are going to create an IAM role and add an inline policy `EKS:Describe` that we will use in the CodeBuild stage to interact with the EKS cluster via kubectl.
@@ -107,7 +79,7 @@ aws iam put-role-policy --role-name EksCodeBuildKubectlRole --policy-name eks-de
 # Verify the same on Management Console
 ```
 
-## Step-07: Update EKS Cluster aws-auth ConfigMap with new role created in previous step
+## Step-06: Update EKS Cluster aws-auth ConfigMap with new role created in previous step
 - We are going to add the role to the `aws-auth ConfigMap` for the EKS cluster.
 - Once the `EKS aws-auth ConfigMap` includes this new role, kubectl in the CodeBuild stage of the pipeline will be able to interact with the EKS cluster via the IAM role.
 ```
@@ -130,7 +102,7 @@ kubectl patch configmap/aws-auth -n kube-system --patch "$(cat /tmp/aws-auth-pat
 kubectl get configmap aws-auth -o yaml -n kube-system
 ```
 
-## Step-08: Review the buildspec.yml for CodeBuild & Environment Variables
+## Step-07: Review the buildspec.yml for CodeBuild & Environment Variables
 
 ### Code Build Introduction
 - Get a high level overview about CodeBuild Service
@@ -142,24 +114,16 @@ EKS_KUBECTL_ROLE_ARN = arn:aws:iam::180789647333:role/EksCodeBuildKubectlRole
 EKS_CLUSTER_NAME = eksdemo1
 ```
 
-## Step-09: Create CodePipeline
+## Step-08: Create CodePipeline
 
-## Step-10: Updae CodeBuild Role to have access to ECR full access   
+## Step-09: Updae CodeBuild Role to have access to ECR full access   
 - First pipeline run will fail as CodeBuild not able to upload or push newly created Docker Image to ECR Repostory
 - Update the CodeBuild Role to have access to ECR to upload images built by codeBuild. 
   - Role Name: codebuild-eks-devops-cb-for-pipe-service-role
   - Policy Name: AmazonEC2ContainerRegistryFullAccess
 - Make changes to index.html (Update as V2),  locally and push change to CodeCommit
-```
-git status
-git commit -am "V2 Deployment"
-git push
-```
-- Verify CodeBuild Logs
-- New image should be uploaded to ECR, verify the ECR with new docker image tag date time.
-- Build will fail again at Post build stage at STS Assume role section. Lets fix that in next step.
 
-## Step-11: Update CodeBuild Role to have access to STS Assume Role we have created using STS Assume Role Policy
+## Step-10: Update CodeBuild Role to have access to STS Assume Role we have created using STS Assume Role Policy
 - Build should be failed due to CodeBuild dont have access to perform updates in EKS Cluster.
 - It even cannot assume the STS Assume role whatever we created. 
 - Create STS Assume Policy and Associate that to CodeBuild Role `codebuild-eks-devops-cb-for-pipe-service-role`
@@ -185,20 +149,4 @@ arn:aws:iam::<your-account-id>:role/EksCodeBuildKubectlRole
 ### Associate Policy to CodeBuild Role
 - Role Name: codebuild-eks-devops-cb-for-pipe-service-role
 - Policy to be associated:  `eks-codebuild-sts-assume-role`
-
-## Step-12: Make changes to index.html file
-- Make changes to index.html (Update as V3)
-- Commit the changes to local git repository and push to codeCommit Repository
-- Monitor the codePipeline
-- Test by accessing the static html page
-```
-git status
-git commit -am "V3 Deployment"
-git push
-```
-- Verify CodeBuild Logs
-- Test by accessing the static html page
-```
-http://devops.kubeoncloud.com/app1/index.html
-```
 
