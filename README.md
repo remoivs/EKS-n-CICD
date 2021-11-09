@@ -8,20 +8,21 @@
     - AWS CodeCommit
     - AWS CodeBuild
     - AWS CodePipeline
-
+```
 eksctl create cluster --name=eksdemo1 --region=us-east-1 --zones=us-east-1a,us-east-1b   --without-nodegroup
 eksctl utils associate-iam-oidc-provider --region us-east-1 --cluster eksdemo1 --approve
 eksctl create nodegroup --cluster=eksdemo1 --region=us-east-1 --name=eksdemo1-ng-private1 --node-type=t3.medium --nodes-min=2 --nodes-max=4 --node-volume-size=20 --ssh-access --ssh-public-key=kube-demo --managed --asg-access --external-dns-access --full-ecr-access --appmesh-access --alb-ingress-access --node-private-networking  
 kube-demo keypair
+```
 For both Public Subnets, add the tag as `kubernetes.io/cluster/eksdemo1 =  shared` 
 Add all traffic to worker nodes 
 
 ## Step-02: Pre-requisite check
 - We are going to deploy a application which will also have a `ALB Ingress Service` 
 - Which means we should have both related pods running in our cluster. 
-```
-Ingress:
 
+Ingress:
+```
 kubectl apply -f https://raw.githubusercontent.com/kubernetes-sigs/aws-alb-ingress-controller/master/docs/examples/rbac-role.yaml
 kubectl get sa -n kube-system
 aws iam create-policy --policy-name ALBIngressControllerIAMPolicy --policy-document https://raw.githubusercontent.com/kubernetes-sigs/aws-alb-ingress-controller/master/docs/examples/iam-policy.json
@@ -44,7 +45,7 @@ kubectl get pods -n kube-system
 ## Step-03: Create ECR Repository for our Application Docker Images
 
 ## Step-04: Create CodeCommit Repository
-
+```
 git status
 git add .
 git commit -am "1 Added all files"
