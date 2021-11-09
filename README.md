@@ -168,3 +168,4 @@ kubectl version --client
 exit
 copy .kube config file 
 
+https://github.com/stacksimplify/aws-eks-kubernetes-masterclass/tree/master/11-DevOps-with-AWS-Developer-Tools
