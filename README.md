@@ -1,5 +1,5 @@
 # EKS-n-CICD
-(notes from aws-eks-kubernetes-masterclass from Udemy)
+
 # DevOps with AWS Developer Tools on AWS EKS
 
 ## Step-01: DevOps
@@ -171,3 +171,4 @@ exit
 copy .kube config file 
 
 https://github.com/stacksimplify/aws-eks-kubernetes-masterclass/tree/master/11-DevOps-with-AWS-Developer-Tools
+(notes from aws-eks-kubernetes-masterclass from Udemy)
