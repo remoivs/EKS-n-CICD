@@ -1,17 +1,15 @@
 # EKS-n-CICD
-
+(notes from aws-eks-kubernetes-masterclass from Udemy)
 # DevOps with AWS Developer Tools on AWS EKS
 
-## Step-01: Introduction to DevOps
-- Understand DevOps concepts
-  - CI - Continuous Integration
-  - CD - Continuous Deployment or Delivery
-- Understand more about AWS Tools that help us to implement DevOps.
+## Step-01: DevOps
+-  EKS cluster
+-  AWS Tools that help us to implement DevOps.
   - AWS CodeCommit
   - AWS CodeBuild
   - AWS CodePipeline
 
-## Step-02: What are we going to learn?
+## Step-02: 
 - We are going to create a ECR Repository for our Docker Images
 - We are going to create Code Commit Git Repository and check-in our Docker and Kubernetes Manifests
 - We will write a `buildspec.yml` which will eventually build a docker image, push the same to ECR Repository and Deploy the updated k8s Deployment manifest to EKS Cluster.
@@ -30,8 +28,6 @@
 # Verify alb-ingress-controller pod running in namespace kube-system
 kubectl get pods -n kube-system
 
-# Verify external-dns pod running in default namespace
-kubectl get pods
 ```
 
 ## Step-04: Create ECR Repository for our Application Docker Images
@@ -146,125 +142,7 @@ EKS_KUBECTL_ROLE_ARN = arn:aws:iam::180789647333:role/EksCodeBuildKubectlRole
 EKS_CLUSTER_NAME = eksdemo1
 ```
 
-### Review buildspec.yml 
-
-```yml
-version: 0.2
-phases:
-  install:
-    commands:
-      - echo "Install Phase - Nothing to do using latest Amazon Linux Docker Image for CodeBuild which has all AWS Tools - https://github.com/aws/aws-codebuild-docker-images/blob/master/al2/x86_64/standard/3.0/Dockerfile"
-  pre_build:
-      commands:
-        # Docker Image Tag with Date Time & Code Buiild Resolved Source Version
-        - TAG="$(date +%Y-%m-%d.%H.%M.%S).$(echo $CODEBUILD_RESOLVED_SOURCE_VERSION | head -c 8)"
-        # Update Image tag in our Kubernetes Deployment Manifest        
-        - echo "Update Image tag in kube-manifest..."
-        - sed -i 's@CONTAINER_IMAGE@'"$REPOSITORY_URI:$TAG"'@' kube-manifests/01-DEVOPS-Nginx-Deployment.yml
-        # Verify AWS CLI Version        
-        - echo "Verify AWS CLI Version..."
-        - aws --version
-        # Login to ECR Registry for docker to push the image to ECR Repository
-        - echo "Login in to Amazon ECR..."
-        - $(aws ecr get-login --no-include-email)
-        # Update Kube config Home Directory
-        - export KUBECONFIG=$HOME/.kube/config
-  build:
-    commands:
-      # Build Docker Image
-      - echo "Build started on `date`"
-      - echo "Building the Docker image..."
-      - docker build --tag $REPOSITORY_URI:$TAG .
-  post_build:
-    commands:
-      # Push Docker Image to ECR Repository
-      - echo "Build completed on `date`"
-      - echo "Pushing the Docker image to ECR Repository"
-      - docker push $REPOSITORY_URI:$TAG
-      - echo "Docker Image Push to ECR Completed -  $REPOSITORY_URI:$TAG"    
-      # Extracting AWS Credential Information using STS Assume Role for kubectl
-      - echo "Setting Environment Variables related to AWS CLI for Kube Config Setup"          
-      - CREDENTIALS=$(aws sts assume-role --role-arn $EKS_KUBECTL_ROLE_ARN --role-session-name codebuild-kubectl --duration-seconds 900)
-      - export AWS_ACCESS_KEY_ID="$(echo ${CREDENTIALS} | jq -r '.Credentials.AccessKeyId')"
-      - export AWS_SECRET_ACCESS_KEY="$(echo ${CREDENTIALS} | jq -r '.Credentials.SecretAccessKey')"
-      - export AWS_SESSION_TOKEN="$(echo ${CREDENTIALS} | jq -r '.Credentials.SessionToken')"
-      - export AWS_EXPIRATION=$(echo ${CREDENTIALS} | jq -r '.Credentials.Expiration')
-      # Setup kubectl with our EKS Cluster              
-      - echo "Update Kube Config"      
-      - aws eks update-kubeconfig --name $EKS_CLUSTER_NAME
-      # Apply changes to our Application using kubectl
-      - echo "Apply changes to kube manifests"            
-      - kubectl apply -f kube-manifests/
-      - echo "Completed applying changes to Kubernetes Objects"           
-      # Create Artifacts which we can use if we want to continue our pipeline for other stages
-      - printf '[{"name":"01-DEVOPS-Nginx-Deployment.yml","imageUri":"%s"}]' $REPOSITORY_URI:$TAG > build.json
-      # Additional Commands to view your credentials      
-      #- echo "Credentials Value is..  ${CREDENTIALS}"      
-      #- echo "AWS_ACCESS_KEY_ID...  ${AWS_ACCESS_KEY_ID}"            
-      #- echo "AWS_SECRET_ACCESS_KEY...  ${AWS_SECRET_ACCESS_KEY}"            
-      #- echo "AWS_SESSION_TOKEN...  ${AWS_SESSION_TOKEN}"            
-      #- echo "AWS_EXPIRATION...  $AWS_EXPIRATION"             
-      #- echo "EKS_CLUSTER_NAME...  $EKS_CLUSTER_NAME"             
-artifacts:
-  files: 
-    - build.json   
-    - kube-manifests/*
-```
-
-
-
 ## Step-09: Create CodePipeline
-### CodePipeline Introduction
-- Get a high level overview about CodePipeline Service
-
-### Create CodePipeline
-- Create CodePipeline
-- Go to Services -> CodePipeline -> Create Pipeline
-- **Pipeline Settings**
-  - Pipeline Name: eks-devops-pipe
-  - Service Role: New Service Role (leave to defaults)
-  - Role Name: Auto-populated
-  - Rest all leave to defaults and click Next
-- **Source**
-  - Source Provider: AWS CodeCommit
-  - Repository Name: eks-devops-nginx 
-  - Branch Name: master
-  - Change Detection Options: CloudWatch Events (leave to defaults)
-- **Build**
-  - Build Provider:  AWS CodeBuild
-  - Region: US East (N.Virginia)  
-  - Project Name:  Click on **Create Project**
-- **Create Build Project**
-  - **Project Configuration**
-    - Project Name: eks-devops-cb-for-pipe
-    - Description: CodeBuild Project for EKS DevOps Pipeline
-  - **Environment**
-    - Environment Image: Managed Image
-    - Operating System: Amazon Linux 2
-    - Runtimes: Standard
-    - Image: aws/codebuild/amazonlinux2-x86_64-standard:3.0
-    - Image Version: Always use the latest version for this runtime
-    - Environment Type: Linux
-    - Privileged: Enable
-    - Role Name: Auto-populated
-    - **Additional Configurations**
-      - All leave to defaults except Environment Variables
-      - Add Environment Variables
-      - REPOSITORY_URI = 180789647333.dkr.ecr.us-east-1.amazonaws.com/eks-devops-nginx
-      - EKS_KUBECTL_ROLE_ARN = arn:aws:iam::180789647333:role/EksCodeBuildKubectlRole
-      - EKS_CLUSTER_NAME = eksdemo1
-  - **Buildspec**
-    - leave to defaults
-  - **Logs**
-    - Group Name: eks-deveops-cb-pipe
-    - Stream Name:     
-- Click on **Continue to CodePipeline**
-- We should see a message `Successfully created eks-devops-cb-for-pipe in CodeBuild.`
-- Click **Next**
-- **Deploy**
-  - Click on **Skip Deploy Stage**
-- **Review**
-  - Review and click on **Create Pipeline**
 
 ## Step-10: Updae CodeBuild Role to have access to ECR full access   
 - First pipeline run will fail as CodeBuild not able to upload or push newly created Docker Image to ECR Repostory
@@ -324,44 +202,3 @@ git push
 http://devops.kubeoncloud.com/app1/index.html
 ```
 
-## Step-13: Add change to Ingress manifest
-- Add new DNS entry and push the changes and test
-- **03-DEVOPS-Nginx-ALB-IngressService.yml**
-```yml
-#Before
-    # External DNS - For creating a Record Set in Route53
-    external-dns.alpha.kubernetes.io/hostname: devops.kubeoncloud.com   
-
-#After
-    # External DNS - For creating a Record Set in Route53
-    external-dns.alpha.kubernetes.io/hostname: devops.kubeoncloud.com, devops2.kubeoncloud.com       
-```
-- Commit the changes to local git repository and push to codeCommit Repository
-- Monitor the codePipeline
-- Test by accessing the static html page
-```
-git status
-git commit -am "V3 Deployment"
-git push
-```
-- Verify CodeBuild Logs
-- Test by accessing the static html page
-```
-http://devops2.kubeoncloud.com/app1/index.html
-```
-
-## Step-14: Clean-Up
-- Delete All kubernetes Objects in EKS Cluster
-```
-kubectl delete -f kube-manifests/
-```
-- Delete Pipeline
-- Delete CodeBuild Project
-- Delete CodeCommit Repository
-- Delete Roles and Policies created
-
-## References
-- https://docs.aws.amazon.com/codebuild/latest/userguide/build-env-ref-available.html
-- https://github.com/aws/aws-codebuild-docker-images/blob/master/al2/x86_64/standard/3.0/Dockerfile
-- **STS Assume Role:** https://docs.aws.amazon.com/cli/latest/reference/sts/assume-role.html
-- https://docs.aws.amazon.com/IAM/latest/UserGuide/troubleshoot_roles.html
