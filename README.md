@@ -5,9 +5,9 @@
 ## Step-01: DevOps
 -  Spin up EKS cluster using eksctl cli
 -  AWS Tools that help us to implement DevOps.
-  - AWS CodeCommit
-  - AWS CodeBuild
-  - AWS CodePipeline
+    - AWS CodeCommit
+    - AWS CodeBuild
+    - AWS CodePipeline
 
 eksctl create cluster --name=eksdemo1 --region=us-east-1 --zones=us-east-1a,us-east-1b   --without-nodegroup
 eksctl utils associate-iam-oidc-provider --region us-east-1 --cluster eksdemo1 --approve
@@ -149,4 +149,21 @@ arn:aws:iam::<your-account-id>:role/EksCodeBuildKubectlRole
 ### Associate Policy to CodeBuild Role
 - Role Name: codebuild-eks-devops-cb-for-pipe-service-role
 - Policy to be associated:  `eks-codebuild-sts-assume-role`
+  
+```  
+kubectl exec -it <pod> /bin/sh
+```
+
+For kubectl in AWS cloud shell:
+  
+In AWS Cloud Shell:
+
+sudo -i
+curl -LO "https://storage.googleapis.com/kubernetes-release/release/$(curl -s https://storage.googleapis.com/kubernetes-release/release/stable.txt)/bin/linux/amd64/kubectl"
+chmod +x ./kubectl
+sudo mv ./kubectl /usr/local/sbin/kubectl
+kubectl version --client
+
+exit
+copy .kube config file 
 
